@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NVIDIA DGX Spark 3D Cutaway Visualizer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #04060d;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #e2e8f0;
+    }
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      cursor: grab;
+    }
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+    #webgl-canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+    #hud-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+    }
+    .hud-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(6, 10, 22, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(118, 185, 0, 0.3);
+      border-radius: 8px;
+      padding: 12px 20px;
+      pointer-events: auto;
+    }
+    .hud-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .nvidia-logo {
+      width: 24px;
+      height: 24px;
+      background: #76B900;
+      clip-path: polygon(0 0, 100% 0, 100% 70%, 70% 100%, 0 100%);
+    }
+    .hud-title h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #ffffff;
+    }
+    .hud-title span {
+      font-size: 12px;
+      color: #76B900;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .hud-status {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+    }
+    .status-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .status-label {
+      color: #64748b;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .status-value {
+      font-weight: 600;
+      color: #38bdf8;
+    }
+    .controls-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: auto;
+      max-width: 320px;
+    }
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: rgba(6, 10, 22, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 8px;
+    }
+    .btn-title {
+      width: 100%;
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    button {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 500;
+    }
+    button:hover {
+      background: rgba(118, 185, 0, 0.2);
+      border-color: #76B900;
+      color: #fff;
+    }
+    button.active {
+      background: #76B900;
+      border-color: #76B900;
+      color: #000;
+      font-weight: 700;
+    }
+    .toggle-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .toggle-btn .indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #475569;
+    }
+    .toggle-btn.active .indicator {
+      background: #000;
+    }
+    .test-trigger-panel {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(6, 10, 22, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(118, 185, 0, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 220px;
+    }
+    .test-btn {
+      background: linear-gradient(135deg, rgba(118, 185, 0, 0.3), rgba(47, 140, 255, 0.3));
+      border: 1px solid #76B900;
+      color: #fff;
+      padding: 8px;
+      text-align: center;
+      font-weight: 600;
+    }
+    .test-btn:hover {
+      background: linear-gradient(135deg, rgba(118, 185, 0, 0.6), rgba(47, 140, 255, 0.6));
+    }
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #94a3b8;
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: #76B900;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div id="canvas-container">
+    <canvas id="webgl-canvas"></canvas>
+  </div>
+
+  <div id="hud-overlay">
+    <div class="hud-header">
+      <div class="hud-title">
+        <div class="nvidia-logo"></div>
+        <div>
+          <h1>DGX SPARK</h1>
+          <span>NVIDIA GB10 Architecture Cutaway</span>
+        </div>
+      </div>
+      <div class="hud-status">
+        <div class="status-item">
+          <span class="status-label">SM Compute</span>
+          <span class="status-value" id="status-sm">48 SMs</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Memory</span>
+          <span class="status-value" id="status-mem">128 GB LPDDR5X</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Thermal Load</span>
+          <span class="status-value" id="status-heat">39 °C</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="btn-group">
+        <div class="btn-title">Camera Focus Preset</div>
+        <button onclick="setCamera('overview')" class="active" id="btn-overview">Overview</button>
+        <button onclick="setCamera('soc')" id="btn-soc">SoC</button>
+        <button onclick="setCamera('gpu')" id="btn-gpu">GPU</button>
+        <button onclick="setCamera('cpu')" id="btn-cpu">CPU</button>
+        <button onclick="setCamera('mem')" id="btn-mem">Memory</button>
+        <button onclick="setCamera('link')" id="btn-link">NVLink</button>
+        <button onclick="setCamera('fan')" id="btn-fan">Fan</button>
+        <button onclick="setCamera('report')" id="btn-report">HUD Screen</button>
+      </div>
+
+      <div class="btn-group">
+        <div class="btn-title">View Options</div>
+        <button class="toggle-btn active" id="btn-xray" onclick="toggleXray()">
+          <div class="indicator"></div> X-Ray Shell
+        </button>
+        <button class="toggle-btn active" id="btn-spin" onclick="toggleSpin()">
+          <div class="indicator"></div> Auto Rotation
+        </button>
+        <button class="toggle-btn active" id="btn-follow" onclick="toggleFollow()">
+          <div class="indicator"></div> Auto Focus Stage
+        </button>
+      </div>
+    </div>
+
+    <div class="test-trigger-panel">
+      <div class="btn-title">Thermal & Activity Control</div>
+      <button class="test-btn" id="btn-sim" onclick="toggleSimulation()">Run Workload Stress</button>
+      
+      <div class="slider-container">
+        <div class="slider-header">
+          <span>Manual Thermal Target</span>
+          <span id="heat-val">0%</span>
+        </div>
+        <input type="range" id="heat-slider" min="0" max="100" value="0" oninput="updateManualHeat(this.value)">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ======================================================================
+       3D SCENE - DGX Spark cutaway. Pure three.js r128 (no addons).
+       ====================================================================== */
+    function createScene(T, cv, hooks) {
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const R = new T.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
+      R.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      const scene = new T.Scene();
+      scene.background = new T.Color(0x060a16);
+      scene.fog = new T.FogExp2(0x060a16, 0.0065);
+      const cam = new T.PerspectiveCamera(42, 1, 0.1, 500);
+
+      const cvs = (w, h, fn) => { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); return c; };
+      const tex = c => { const t = new T.CanvasTexture(c); t.anisotropy = 4; return t; };
+
+      /* ---------- environment (soft-box studio) ---------- */
+      try {
+        const envC = cvs(1024, 512, (x, w, h) => {
+          const g = x.createLinearGradient(0, 0, 0, h);
+          g.addColorStop(0, '#223463'); g.addColorStop(.5, '#0c1329'); g.addColorStop(1, '#04060d');
+          x.fillStyle = g; x.fillRect(0, 0, w, h);
+          const box = (cx, cy, bw, bh, col, a) => { x.globalAlpha = a; x.fillStyle = col; x.fillRect(cx - bw / 2, cy - bh / 2, bw, bh); };
+          box(250, 150, 190, 70, '#ffffff', .95); box(770, 130, 230, 50, '#cfe0ff', .9); box(512, 55, 420, 28, '#ffffff', .7);
+          box(90, 270, 60, 170, '#76B900', .55); box(935, 275, 70, 150, '#2f8cff', .55);
+          x.globalAlpha = 1;
+        });
+        const envT = new T.CanvasTexture(envC);
+        envT.mapping = T.EquirectangularReflectionMapping;
+        const pm = new T.PMREMGenerator(R);
+        scene.environment = pm.fromEquirectangular(envT).texture;
+        pm.dispose(); envT.dispose();
+      } catch (e) { console.warn('env map skipped', e); }
+
+      scene.add(new T.AmbientLight(0x8090c0, .4));
+      const key = new T.DirectionalLight(0xffffff, .85); key.position.set(8, 18, 12); scene.add(key);
+      const fill = new T.DirectionalLight(0x6f9bff, .35); fill.position.set(-12, 7, -9); scene.add(fill);
+      const rim = new T.PointLight(0x76B900, .6, 60); rim.position.set(0, 3, -16); scene.add(rim);
+      const heatLight = new T.PointLight(0x2f8cff, 0, 22); heatLight.position.set(.2, .4, .3); scene.add(heatLight);
+
+      /* ---------- floor ---------- */
+      const floorTex = tex(cvs(512, 512, (x, w, h) => {
+        const g = x.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w / 2);
+        g.addColorStop(0, 'rgba(46,70,140,.55)'); g.addColorStop(.45, 'rgba(18,28,60,.35)'); g.addColorStop(1, 'rgba(6,10,22,0)');
+        x.fillStyle = g; x.fillRect(0, 0, w, h);
+      }));
+      const floor = new T.Mesh(new T.PlaneGeometry(120, 120), new T.MeshBasicMaterial({ map: floorTex, transparent: true, depthWrite: false }));
+      floor.rotation.x = -Math.PI / 2; floor.position.y = -2.9; scene.add(floor);
+      const grid = new T.GridHelper(160, 80, 0x1b2a55, 0x0e1630); grid.position.y = -2.92; grid.material.transparent = true; grid.material.opacity = .55; scene.add(grid);
+      const ringMat = new T.MeshBasicMaterial({ color: 0x76B900, transparent: true, opacity: .5, side: T.DoubleSide });
+      const ring1 = new T.Mesh(new T.RingGeometry(11.4, 11.55, 96), ringMat); ring1.rotation.x = -Math.PI / 2; ring1.position.y = -2.88; scene.add(ring1);
+      const ring2 = new T.Mesh(new T.RingGeometry(14.2, 14.3, 96), new T.MeshBasicMaterial({ color: 0x2f8cff, transparent: true, opacity: .25, side: T.DoubleSide }));
+      ring2.rotation.x = -Math.PI / 2; ring2.position.y = -2.88; scene.add(ring2);
+
+      /* ---------- chassis ---------- */
+      const W = 16, D = 16, WH = 4.6, WT = .5, CR = 1.8;
+      function rrect(w, d, r) {
+        const s = new T.Shape(), x = -w / 2, y = -d / 2;
+        s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+        s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+        s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r);
+        s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+        return s;
+      }
+      function slab(w, d, r, h, hole) {
+        const s = rrect(w, d, r);
+        if (hole) s.holes.push(rrect(w - 2 * hole, d - 2 * hole, Math.max(.2, r - hole * .8)));
+        const g = new T.ExtrudeGeometry(s, { depth: h, bevelEnabled: true, bevelThickness: .05, bevelSize: .05, bevelSegments: 2, curveSegments: 18 });
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }
+      const goldBase = { color: 0xc9b07b, metalness: .85, roughness: .33, envMapIntensity: 1.15 };
+      const shellMat = new T.MeshStandardMaterial({ ...goldBase, transparent: true });
+      const lidMat = new T.MeshStandardMaterial({ ...goldBase, transparent: true });
+      const chassis = new T.Group(); scene.add(chassis);
+      const walls = new T.Mesh(slab(W, D, CR, WH, WT), shellMat); walls.position.y = -2.3; chassis.add(walls);
+      const bottom = new T.Mesh(slab(W, D, CR, .4, 0), shellMat); bottom.position.y = -2.7; chassis.add(bottom);
+      const lid = new T.Mesh(slab(W, D, CR, .4, 0), lidMat); lid.position.y = 2.3; chassis.add(lid);
+
+      // lid lettering
+      const lidText = new T.Mesh(new T.PlaneGeometry(6, 1.5), new T.MeshBasicMaterial({ transparent: true, depthWrite: false, map: tex(cvs(512, 128, (x, w, h) => {
+        x.font = '700 40px Sora, Arial'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillStyle = '#3a3320'; x.fillText('DGX SPARK', 12, h / 2);
+        x.fillStyle = '#76B900'; x.fillRect(14, h / 2 + 30, 120, 5);
+      })) }));
+      lidText.rotation.x = -Math.PI / 2; lidText.position.set(-4.2, 2.74, 5.6); chassis.add(lidText);
+
+      // front grille & back ports
+      const grilleTex = tex(cvs(1024, 320, (x, w, h) => {
+        x.fillStyle = '#171309'; x.fillRect(0, 0, w, h);
+        for (let r = 0; r < 24; r++) for (let c = 0; c < 80; c++) {
+          x.fillStyle = 'rgba(222,200,140,.85)'; x.beginPath(); x.arc(8 + c * 12.7 + (r % 2) * 6, 8 + r * 13, 3.1, 0, 7); x.fill();
+        }
+      }));
+      const grilleMat = new T.MeshStandardMaterial({ map: grilleTex, metalness: .55, roughness: .5, transparent: true });
+      const front = new T.Mesh(new T.PlaneGeometry(13.4, 4.1), grilleMat); front.position.set(0, 0, 8.07); chassis.add(front);
+
+      /* ---------- circuit board ---------- */
+      const pcb = new T.Mesh(new T.BoxGeometry(14.6, .18, 14.6), new T.MeshStandardMaterial({ color: 0x0b1f17, roughness: .6, metalness: .25 }));
+      pcb.position.y = -1.9; chassis.add(pcb);
+
+      const substrate = new T.Mesh(new T.BoxGeometry(10.1, .2, 5.2), new T.MeshStandardMaterial({ color: 0x17351f, roughness: .5, metalness: .3 }));
+      substrate.position.set(.15, -1.7, .3); chassis.add(substrate);
+
+      /* ---------- dies with glowing core grids ---------- */
+      const dieMat = new T.MeshStandardMaterial({ color: 0x0b1222, roughness: .3, metalness: .7 });
+      const CPU_C = new T.Vector3(-2.4, -1.5, .3), GPU_C = new T.Vector3(2.4, -1.5, .3);
+      const cpuDie = new T.Mesh(new T.BoxGeometry(3.2, .2, 3.8), dieMat); cpuDie.position.copy(CPU_C); chassis.add(cpuDie);
+      const gpuDie = new T.Mesh(new T.BoxGeometry(4.2, .2, 3.8), dieMat); gpuDie.position.copy(GPU_C); chassis.add(gpuDie);
+      const edge = (m, col) => { const l = new T.LineSegments(new T.EdgesGeometry(m.geometry), new T.LineBasicMaterial({ color: col, transparent: true, opacity: .8 })); l.position.copy(m.position); chassis.add(l); return l; };
+      const gpuEdge = edge(gpuDie, 0x76B900), cpuEdge = edge(cpuDie, 0xffb347);
+
+      const dummy = new T.Object3D();
+      function cellGrid(n, cols, rows, cx, cz, px, pz, size) {
+        const m = new T.InstancedMesh(new T.BoxGeometry(size, .13, size), new T.MeshBasicMaterial(), n);
+        for (let i = 0; i < n; i++) {
+          const c = i % cols, r = Math.floor(i / cols);
+          dummy.position.set(cx + (c - (cols - 1) / 2) * px, -1.33, cz + (r - (rows - 1) / 2) * pz); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix);
+          m.setColorAt(i, new T.Color(0x0d1a2e));
+        }
+        chassis.add(m); return m;
+      }
+      const NSM = 48, NCPU = 20;
+      const gpuCells = cellGrid(NSM, 8, 6, GPU_C.x, GPU_C.z, .5, .58, .4);
+      const cpuCells = cellGrid(NCPU, 4, 5, CPU_C.x, CPU_C.z, .72, .7, .5);
+
+      /* ---------- LPDDR5X packages ---------- */
+      const memTop = tex(cvs(256, 256, (x, w, h) => {
+        x.fillStyle = '#10131c'; x.fillRect(0, 0, w, h); x.strokeStyle = '#2b3350'; x.lineWidth = 6; x.strokeRect(6, 6, w - 12, h - 12);
+        x.fillStyle = '#9fb0e0'; x.font = '700 30px Sora, Arial'; x.textAlign = 'center'; x.fillText('LPDDR5X', w / 2, h / 2 - 6); x.fillStyle = '#6f7ea8'; x.font = '600 26px Sora, Arial'; x.fillText('16 GB', w / 2, h / 2 + 34);
+      }));
+      const memMats = [];
+      [-6.2, 6.3].forEach(mx => [-4.2, -1.4, 1.4, 4.2].forEach(mz => {
+        const mat = new T.MeshStandardMaterial({ map: memTop, emissive: 0x2f8cff, emissiveIntensity: 0, roughness: .5, metalness: .4 });
+        const m = new T.Mesh(new T.BoxGeometry(1.6, .3, 2.4), [mat, mat, new T.MeshStandardMaterial({ map: memTop, emissive: 0x2f8cff, emissiveIntensity: 0, roughness: .5, metalness: .4 }), mat, mat, mat]);
+        m.position.set(mx, -1.655, mz); chassis.add(m); memMats.push(m.material[2], mat);
+      }));
+
+      /* ---------- fan ---------- */
+      const fan = new T.Group(); fan.position.set(.2, .1, -6.6); chassis.add(fan);
+      const fanSpin = new T.Group(); fan.add(fanSpin);
+      const frameMat = new T.MeshStandardMaterial({ color: 0x20242f, metalness: .6, roughness: .4 });
+      fan.add(new T.Mesh(new T.TorusGeometry(1.9, .12, 10, 56), frameMat));
+      const hub = new T.Mesh(new T.CylinderGeometry(.55, .55, .35, 24), new T.MeshStandardMaterial({ color: 0x2a2f3d, metalness: .7, roughness: .3 })); hub.rotation.x = Math.PI / 2; fanSpin.add(hub);
+      const bladeMat = new T.MeshStandardMaterial({ color: 0x3b4254, metalness: .6, roughness: .35, side: T.DoubleSide });
+      for (let k = 0; k < 7; k++) {
+        const piv = new T.Group(); piv.rotation.z = k * Math.PI * 2 / 7;
+        const b = new T.Mesh(new T.BoxGeometry(1.3, .6, .03), bladeMat); b.position.x = 1.15; b.rotation.x = .6; piv.add(b); fanSpin.add(piv);
+      }
+
+      /* ---------- glow sprites ---------- */
+      const glowTex = tex(cvs(128, 128, (x, w, h) => {
+        const g = x.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.35, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        x.fillStyle = g; x.fillRect(0, 0, w, h);
+      }));
+      const glow = (col, s, p) => { const sp = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color: col, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false })); sp.scale.set(s, s, 1); sp.position.copy(p); chassis.add(sp); return sp; };
+      const gpuGlow = glow(0x76B900, 9, new T.Vector3(GPU_C.x, -1, GPU_C.z));
+      const cpuGlow = glow(0xffb347, 7.5, new T.Vector3(CPU_C.x, -1, CPU_C.z));
+      const heatGlow = glow(0xff6a2a, 15, new T.Vector3(.2, -.6, .3));
+
+      /* ---------- particle flows ---------- */
+      const dotTex = tex(cvs(64, 64, (x, w, h) => { const g = x.createRadialGradient(32, 32, 1, 32, 32, 30); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.4, 'rgba(255,255,255,.6)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); }));
+      const flows = [];
+      function makeFlow(path, n, color, size, speed, parent) {
+        const pos = new Float32Array(n * 3), g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3));
+        const m = new T.PointsMaterial({ color, size, map: dotTex, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, sizeAttenuation: true });
+        const pts = new T.Points(g, m); pts.frustumCulled = false; (parent || chassis).add(pts);
+        const seg = []; let total = 0; for (let i = 0; i < path.length - 1; i++) { const l = path[i].distanceTo(path[i + 1]); seg.push(l); total += l; }
+        const u = new Float32Array(n), dir = new Float32Array(n);
+        for (let i = 0; i < n; i++) { u[i] = Math.random(); dir[i] = i % 2 ? -1 : 1; }
+        const f = { g, pos, u, dir, m, path, seg, total, speed, n, act: 0, tgt: 0 }; flows.push(f); return f;
+      }
+      const _p = new T.Vector3();
+      function flowPoint(f, u, out) {
+        let d = u * f.total;
+        for (let i = 0; i < f.seg.length; i++) { if (d <= f.seg[i] || i === f.seg.length - 1) return out.copy(f.path[i]).lerp(f.path[i + 1], f.seg[i] ? Math.min(1, d / f.seg[i]) : 0); d -= f.seg[i]; }
+        return out;
+      }
+      const V = (x, y, z) => new T.Vector3(x, y, z), FY = -1.1;
+      const memFlows = [];
+      [-6.2, 6.3].forEach(mx => [-4.2, -1.4, 1.4, 4.2].forEach(mz => {
+        const left = mx < 0, zc = clamp(mz, -1.4, 2.0);
+        const path = left ? [V(mx + .8, FY, mz), V(-4.5, FY, zc), V(-3.95, FY, zc)] : [V(mx - .8, FY, mz), V(5.0, FY, zc), V(4.5, FY, zc)];
+        memFlows.push(makeFlow(path, 12, left ? 0xffb347 : 0x76B900, .3, 5));
+      }));
+      const linkFlows = [-.9, .3, 1.5].map(z => makeFlow([V(-.75, FY, z), V(.35, FY, z)], 10, 0x7dd3fc, .3, 3));
+      const reportFlow = makeFlow([V(.2, -.9, .3), V(.2, 5, .3), V(10, 8, -2)], 28, 0x76B900, .35, 7, scene);
+
+      /* ---------- floating results screen ---------- */
+      const SCR_W = 1024, SCR_H = 600;
+      const scrCanvas = cvs(SCR_W, SCR_H, () => { });
+      const scrTex = new T.CanvasTexture(scrCanvas);
+      const scrGroup = new T.Group(); scrGroup.position.set(15, 6, -2); scene.add(scrGroup);
+      const scrMesh = new T.Mesh(new T.PlaneGeometry(15, 8.79), new T.MeshBasicMaterial({ map: scrTex })); scrGroup.add(scrMesh);
+      const scrFrame = new T.Mesh(new T.BoxGeometry(15.3, 9.1, .15), new T.MeshStandardMaterial({ color: 0x0c1226, metalness: .6, roughness: .35, emissive: 0x76B900, emissiveIntensity: .08 }));
+      scrFrame.position.z = -.1; scrGroup.add(scrFrame);
+      const scrEdge = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(15.3, 9.1, .15)), new T.LineBasicMaterial({ color: 0x76B900, transparent: true, opacity: .8 })); scrEdge.position.z = -.1; scrGroup.add(scrEdge);
+      let screenDirty = true, lastScr = 0;
+
+      /* ---------- activity model ---------- */
+      const UNITS = ['gpu', 'cpu', 'mem', 'link', 'thermal', 'report'];
+      const base = {}, pulse = {}, act = {};
+      UNITS.forEach(u => { base[u] = 0; pulse[u] = 0; act[u] = 0; });
+      let running = false, sim = false, heat = 0, heatTarget = 0, heatFromTelemetry = false;
+      const gpuHot = new T.Color(0x76B900), gpuHotT = new T.Color(0x76B900);
+      const cold = new T.Color(0x0d1a2e), tmpC = new T.Color(), cpuBig = new T.Color(0xffb347), cpuSmall = new T.Color(0x3ad0ff);
+
+      const UNIT_BASE = {
+        soc: { gpu: .25, cpu: .25, mem: .25, link: .25 }, gpu: { gpu: .6, mem: .15 }, cpu: { cpu: .6, mem: .1 },
+        mem: { mem: .85, gpu: .3, cpu: .15 }, link: { link: .9, mem: .45, cpu: .25 }, thermal: { gpu: .85, thermal: 1, mem: .4 }, report: { report: 1 }
+      };
+      function setStage(unit) {
+        UNITS.forEach(u => base[u] = 0);
+        Object.entries(UNIT_BASE[unit] || {}).forEach(([k, v]) => base[k] = v);
+        if (unit !== 'thermal' && !heatFromTelemetry) heatTarget = Math.max(heatTarget, .15);
+      }
+      function setHeat(n) { if (n == null) { heatFromTelemetry = false; return; } heatFromTelemetry = true; heatTarget = clamp(n, 0, 1); }
+      function setRunning(r, isSim) { running = r; sim = !!isSim; if (!r) { UNITS.forEach(u => base[u] = 0); if (!heatFromTelemetry) heatTarget = 0; } screenDirty = true; }
+
+      /* ---------- camera rig ---------- */
+      const PRESETS = {
+        overview: { t: [2, .6, 0], yaw: .62, pitch: .5, dist: 36 }, soc: { t: [.15, -1.4, .3], yaw: .35, pitch: .95, dist: 17 },
+        gpu: { t: [2.4, -1.4, .3], yaw: .45, pitch: .9, dist: 12 }, cpu: { t: [-2.4, -1.4, .3], yaw: -.45, pitch: .9, dist: 12 },
+        mem: { t: [-6.2, -1.5, 0], yaw: -.9, pitch: .75, dist: 15 }, link: { t: [0, -1.4, .3], yaw: 0, pitch: 1.05, dist: 11 },
+        fan: { t: [.2, 0, -6.6], yaw: Math.PI - .4, pitch: .35, dist: 14 },
+        report: { t: [8, 3.5, -1], yaw: .25, pitch: .25, dist: 32 }
+      };
+      const view = { tx: 2, ty: .6, tz: 0, yaw: .62, pitch: .5, dist: 36 }, cur = { ...view };
+      let follow = true, xray = true, spin = true, focusName = 'overview', distMul = 1, lastInput = 0;
+      function focus(name) {
+        const p = PRESETS[name]; if (!p) return; focusName = name;
+        view.tx = p.t[0]; view.ty = p.t[1]; view.tz = p.t[2]; view.pitch = p.pitch; view.dist = p.dist;
+        view.yaw = p.yaw + Math.round((cur.yaw - p.yaw) / (Math.PI * 2)) * Math.PI * 2;
+      }
+
+      const ptrs = new Map();
+      const userCam = () => { lastInput = performance.now(); hooks.onUserCamera && hooks.onUserCamera(); };
+      cv.addEventListener('pointerdown', e => { try { cv.setPointerCapture(e.pointerId); } catch (_) { } ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); userCam(); });
+      cv.addEventListener('pointermove', e => {
+        const p = ptrs.get(e.pointerId); if (!p) return;
+        if (ptrs.size === 1) { view.yaw -= (e.clientX - p.x) * .006; view.pitch = clamp(view.pitch + (e.clientY - p.y) * .005, .08, 1.45); }
+        else if (ptrs.size === 2) {
+          const o = [...ptrs.entries()].find(([id]) => id !== e.pointerId)[1];
+          const d0 = Math.hypot(p.x - o.x, p.y - o.y), d1 = Math.hypot(e.clientX - o.x, e.clientY - o.y);
+          view.dist = clamp(view.dist * (d0 / Math.max(1, d1)), 8, 80);
+        }
+        p.x = e.clientX; p.y = e.clientY; userCam();
+      });
+      const up = e => { ptrs.delete(e.pointerId); };
+      cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+      cv.addEventListener('wheel', e => { e.preventDefault(); view.dist = clamp(view.dist + e.deltaY * .03, 8, 80); userCam(); }, { passive: false });
+
+      function resize() {
+        const width = cv.parentElement ? cv.parentElement.clientWidth : window.innerWidth;
+        const height = cv.parentElement ? cv.parentElement.clientHeight : window.innerHeight;
+
+        R.setSize(width, height, false);
+        cam.aspect = width / height;
+        cam.updateProjectionMatrix();
+        distMul = Math.max(1, 1.3 / cam.aspect);
+      }
+      window.addEventListener('resize', resize); resize();
+
+      /* ---------- per-frame animation ---------- */
+      const rnd = i => { const s = Math.sin(i * 12.9898) * 43758.5453; return s - Math.floor(s); };
+      function updateCells(mesh, n, cols, a, hotFor, t) {
+        for (let i = 0; i < n; i++) {
+          const r = Math.floor(i / cols), c = i % cols;
+          const wave = .5 + .5 * Math.sin(t * 5.5 - (c + r) * .7);
+          const flick = .5 + .5 * Math.sin(t * (3 + rnd(i) * 5) + i);
+          const v = clamp(a * (.2 + .55 * wave + .25 * flick), 0, 1);
+          tmpC.copy(cold).lerp(hotFor(i), v); mesh.setColorAt(i, tmpC);
+        }
+        mesh.instanceColor.needsUpdate = true;
+      }
+      const hotGpu = () => gpuHot, hotCpu = i => (i < 10 ? cpuBig : cpuSmall);
+      const clock = new T.Clock(); let lidO = .06, shellO = .35, fanAngle = 0;
+      const heatCold = new T.Color(0x2f8cff), heatHot = new T.Color(0xff5a1f), heatCol = new T.Color();
+
+      function frame() {
+        requestAnimationFrame(frame);
+        const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
+
+        UNITS.forEach(u => {
+          pulse[u] = Math.max(0, pulse[u] - dt * .55);
+          const idle = running ? 0 : .05 + .03 * Math.sin(t * 1.3 + u.length);
+          const tgt = Math.max(base[u], pulse[u] * (1 - base[u] * .3), idle);
+          act[u] += (tgt - act[u]) * clamp(dt * 5, 0, 1);
+        });
+
+        const thermalTarget = heatFromTelemetry ? heatTarget : (running ? Math.max(heatTarget, act.gpu * .6 + act.thermal * .3) : heatTarget);
+        heat += (thermalTarget - heat) * clamp(dt * .8, 0, 1);
+
+        updateCells(gpuCells, NSM, 8, act.gpu, hotGpu, t);
+        updateCells(cpuCells, NCPU, 4, act.cpu, hotCpu, t);
+        gpuGlow.material.opacity = act.gpu * .7; cpuGlow.material.opacity = act.cpu * .65;
+        heatGlow.material.opacity = heat * .55; heatCol.copy(heatCold).lerp(heatHot, heat); heatGlow.material.color.copy(heatCol);
+        heatLight.color.copy(heatCol); heatLight.intensity = .3 + heat * 2.2 + (act.gpu + act.cpu) * .5;
+        gpuEdge.material.opacity = .45 + .5 * act.gpu; cpuEdge.material.opacity = .45 + .5 * act.cpu;
+        memMats.forEach((m, i) => { m.emissiveIntensity = act.mem * (.35 + .65 * (.5 + .5 * Math.sin(t * 6 + i * .9))); });
+
+        fanAngle += dt * (.7 + (heat * .75 + Math.max(act.gpu, act.cpu) * .25) * 20); fanSpin.rotation.z = fanAngle;
+
+        memFlows.forEach(f => f.tgt = act.mem); linkFlows.forEach(f => f.tgt = act.link); reportFlow.tgt = act.report;
+        for (const f of flows) {
+          f.act += (f.tgt - f.act) * clamp(dt * 6, 0, 1); f.m.opacity = clamp(f.act * 1.1, 0, .95);
+          if (f.act < .02) continue;
+          const step = f.speed * (.4 + f.act) * dt / Math.max(.001, f.total);
+          for (let i = 0; i < f.n; i++) {
+            f.u[i] += f.dir[i] * step; if (f.u[i] > 1) f.u[i] -= 1; else if (f.u[i] < 0) f.u[i] += 1;
+            flowPoint(f, f.u[i], _p); f.pos[i * 3] = _p.x; f.pos[i * 3 + 1] = _p.y; f.pos[i * 3 + 2] = _p.z;
+          }
+          f.g.attributes.position.needsUpdate = true;
+        }
+
+        lidO += ((xray ? .06 : 1) - lidO) * clamp(dt * 4, 0, 1);
+        shellO += ((xray ? .35 : 1) - shellO) * clamp(dt * 4, 0, 1);
+        lidMat.opacity = lidO; lid.visible = lidO > .02; lidText.visible = lidO > .5; shellMat.opacity = shellO; grilleMat.opacity = shellO;
+
+        if (spin && !ptrs.size && performance.now() - lastInput > 4000 && focusName === 'overview') view.yaw += dt * .09;
+        const ease = clamp(dt * 3.2, 0, 1);
+        cur.yaw += (view.yaw - cur.yaw) * ease;
+        cur.pitch += (view.pitch - cur.pitch) * ease; cur.dist += (view.dist - cur.dist) * ease;
+        cur.tx += (view.tx - cur.tx) * ease; cur.ty += (view.ty - cur.ty) * ease; cur.tz += (view.tz - cur.tz) * ease;
+        const d = cur.dist * distMul;
+        cam.position.set(cur.tx + Math.sin(cur.yaw) * Math.cos(cur.pitch) * d, cur.ty + Math.sin(cur.pitch) * d, cur.tz + Math.cos(cur.yaw) * Math.cos(cur.pitch) * d);
+        cam.lookAt(cur.tx, cur.ty, cur.tz);
+
+        scrGroup.rotation.y = Math.atan2(cam.position.x - scrGroup.position.x, cam.position.z - scrGroup.position.z);
+        scrGroup.position.y = 6 + Math.sin(t * .8) * .25;
+        if (screenDirty || t - lastScr > .25) {
+          hooks.drawScreen(scrCanvas.getContext('2d'), SCR_W, SCR_H, t, { running, sim, heat });
+          scrTex.needsUpdate = true; lastScr = t; screenDirty = false;
+        }
+
+        // Update UI HTML metrics
+        document.getElementById('status-heat').innerText = Math.round(39 + heat * 45) + ' °C';
+
+        R.render(scene, cam);
+      }
+      focus('overview'); Object.assign(cur, view);
+      cam.position.set(30, 22, 30); frame();
+
+      return {
+        setStage: unit => { setStage(unit); },
+        setHeat, setRunning,
+        focus: n => { focus(n); }, setFollow: v => { follow = v; }, setXray: v => { xray = v; }, setSpin: v => { spin = v; },
+        markScreen: () => { screenDirty = true; }, getFocus: () => focusName, resize
+      };
+    }
+
+    // Initialize application
+    let sceneControl = null;
+    let isSimulating = false;
+    let xrayState = true;
+    let spinState = true;
+    let followState = true;
+
+    function drawHUDCanvas(ctx, w, h, t, state) {
+      ctx.fillStyle = '#060a16';
+      ctx.fillRect(0, 0, w, h);
+      
+      // Border & Grid
+      ctx.strokeStyle = '#76B900';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(10, 10, w - 20, h - 20);
+      
+      ctx.fillStyle = '#76B900';
+      ctx.font = '700 36px Sora, sans-serif';
+      ctx.fillText('NVIDIA GB10 SPARK DIAGNOSTICS', 40, 60);
+
+      // System Specs Panel
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(40, 90, 440, 220);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '600 22px Sora, sans-serif';
+      ctx.fillText('SYSTEM ARCHITECTURE', 60, 125);
+      
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '20px Sora, sans-serif';
+      ctx.fillText('Architecture: Blackwell sm_121', 60, 165);
+      ctx.fillText('CPU Cores: 20 ARM (Cortex-X925/A725)', 60, 200);
+      ctx.fillText('GPU Compute: 48 SMs', 60, 235);
+      ctx.fillText('Unified Memory: 128 GB LPDDR5X', 60, 270);
+
+      // Performance Benchmarks Panel
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(510, 90, 470, 220);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '600 22px Sora, sans-serif';
+      ctx.fillText('TFLOP/S PERFORMANCE (GEMM)', 530, 125);
+
+      const precisions = [
+        { label: 'FP32', tflops: 19.2 },
+        { label: 'FP16/BF16', tflops: 94.0 },
+        { label: 'FP8 (e4m3)', tflops: 197.6 },
+        { label: 'NVFP4', tflops: 355.5 }
+      ];
+
+      precisions.forEach((p, idx) => {
+        const y = 165 + idx * 32;
+        ctx.fillStyle = '#a0aec0';
+        ctx.font = '18px Sora, sans-serif';
+        ctx.fillText(p.label, 530, y);
+        
+        ctx.fillStyle = 'rgba(118, 185, 0, 0.2)';
+        ctx.fillRect(660, y - 14, 200, 16);
+        
+        const fillW = (p.tflops / 400) * 200;
+        ctx.fillStyle = '#76B900';
+        ctx.fillRect(660, y - 14, fillW, 16);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(p.tflops.toFixed(1), 875, y);
+      });
+
+      // Live Telemetry Waveform
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(40, 330, 940, 220);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '600 22px Sora, sans-serif';
+      ctx.fillText('THERMAL & COMPUTE LOAD OVER TIME', 60, 365);
+
+      ctx.beginPath();
+      ctx.strokeStyle = state.sim ? '#ff5a1f' : '#76B900';
+      ctx.lineWidth = 3;
+      for (let x = 0; x < 900; x += 10) {
+        const freq = state.sim ? 0.05 : 0.02;
+        const amp = state.sim ? 40 : 10;
+        const y = 460 + Math.sin((t * 5 + x * freq)) * amp + (Math.random() - 0.5) * (state.sim ? 15 : 4);
+        if (x === 0) ctx.moveTo(60 + x, y);
+        else ctx.lineTo(60 + x, y);
+      }
+      ctx.stroke();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('webgl-canvas');
+      sceneControl = createScene(THREE, canvas, {
+        drawScreen: drawHUDCanvas,
+        onUserCamera: () => {
+          // Keep state responsive to user interaction
+        }
+      });
+
+      const resizeObserver = new ResizeObserver(() => {
+        if (sceneControl) sceneControl.resize();
+      });
+      resizeObserver.observe(document.getElementById('canvas-container'));
+    });
+
+    function setCamera(name) {
+      document.querySelectorAll('.btn-group button').forEach(b => {
+        if (b.id && b.id.startsWith('btn-')) b.classList.remove('active');
+      });
+      const el = document.getElementById('btn-' + name);
+      if (el) el.classList.add('active');
+
+      if (sceneControl) {
+        sceneControl.focus(name);
+        if (name !== 'overview') {
+          sceneControl.setStage(name);
+        }
+      }
+    }
+
+    function toggleXray() {
+      xrayState = !xrayState;
+      document.getElementById('btn-xray').classList.toggle('active', xrayState);
+      if (sceneControl) sceneControl.setXray(xrayState);
+    }
+
+    function toggleSpin() {
+      spinState = !spinState;
+      document.getElementById('btn-spin').classList.toggle('active', spinState);
+      if (sceneControl) sceneControl.setSpin(spinState);
+    }
+
+    function toggleFollow() {
+      followState = !followState;
+      document.getElementById('btn-follow').classList.toggle('active', followState);
+      if (sceneControl) sceneControl.setFollow(followState);
+    }
+
+    function toggleSimulation() {
+      isSimulating = !isSimulating;
+      const btn = document.getElementById('btn-sim');
+      btn.innerText = isSimulating ? 'Stop Stress Workload' : 'Run Workload Stress';
+      btn.style.borderColor = isSimulating ? '#ff5a1f' : '#76B900';
+      
+      if (sceneControl) {
+        sceneControl.setRunning(isSimulating, isSimulating);
+        if (isSimulating) {
+          sceneControl.setStage('gpu');
+          sceneControl.setHeat(0.85);
+          document.getElementById('heat-slider').value = 85;
+          document.getElementById('heat-val').innerText = '85%';
+        } else {
+          sceneControl.setHeat(0);
+          document.getElementById('heat-slider').value = 0;
+          document.getElementById('heat-val').innerText = '0%';
+        }
+      }
+    }
+
+    function updateManualHeat(val) {
+      document.getElementById('heat-val').innerText = val + '%';
+      if (sceneControl) {
+        sceneControl.setHeat(val / 100);
+      }
+    }
+  </script>
+</body>
+</html>
